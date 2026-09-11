@@ -963,7 +963,6 @@ app.get("/api/regions", (req, res) => {
   }
 });
 
-
 /*
  * D8.2 — Register FCM device
  */
@@ -971,43 +970,69 @@ app.post("/api/notifications/register", (req, res) => {
   try {
     const { fid, deviceName } = req.body || {};
 
-    if (typeof fid !== "string" || fid.trim().length === 0) {
+    if (
+      typeof fid !== "string" ||
+      fid.trim().length === 0
+    ) {
       return res.status(400).json({
         success: false,
-        error: "Firebase Installation ID (FID) is required.",
+        error:
+          "Firebase Installation ID (FID) is required.",
       });
     }
 
     const cleanFid = fid.trim();
+
     const cleanDeviceName =
-      typeof deviceName === "string" && deviceName.trim().length > 0
+      typeof deviceName === "string" &&
+      deviceName.trim().length > 0
         ? deviceName.trim()
-        : `Prototype Device ${notificationDevices.size + 1}`;
+        : `Prototype Device ${
+            notificationDevices.size + 1
+          }`;
 
-    const existingDevice = notificationDevices.get(cleanFid);
-    const now = new Date().toISOString();
+    const existingDevice =
+      notificationDevices.get(
+        cleanFid
+      );
 
-    notificationDevices.set(cleanFid, {
-      fid: cleanFid,
-      deviceName: cleanDeviceName,
-      registeredAt: existingDevice?.registeredAt || now,
-      lastSeenAt: now,
-    });
+    const now =
+      new Date().toISOString();
 
-    console.log(`FCM device registered: ${cleanDeviceName}`);
+    notificationDevices.set(
+      cleanFid,
+      {
+        fid: cleanFid,
+        deviceName: cleanDeviceName,
+        registeredAt:
+          existingDevice?.registeredAt ||
+          now,
+        lastSeenAt: now,
+      }
+    );
+
+    console.log(
+      `FCM device registered: ${cleanDeviceName}`
+    );
 
     return res.json({
       success: true,
-      message: "Device registered for SIH 26001 push notifications.",
+      message:
+        "Device registered for SIH 26001 push notifications.",
       deviceName: cleanDeviceName,
-      deviceCount: notificationDevices.size,
+      deviceCount:
+        notificationDevices.size,
     });
   } catch (error) {
-    console.error("FCM device registration error:", error);
+    console.error(
+      "FCM device registration error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      error: "Unable to register notification device.",
+      error:
+        "Unable to register notification device.",
     });
   }
 });
@@ -1016,202 +1041,300 @@ app.post("/api/notifications/register", (req, res) => {
  * D8.2 — List registered devices
  * FIDs are intentionally not returned.
  */
-app.get("/api/notifications/devices", (req, res) => {
-  try {
-    const devices = Array.from(notificationDevices.values()).map(
-      (device) => ({
-        deviceName: device.deviceName,
-        registeredAt: device.registeredAt,
-        lastSeenAt: device.lastSeenAt,
-      })
-    );
+app.get(
+  "/api/notifications/devices",
+  (req, res) => {
+    try {
+      const devices =
+        Array.from(
+          notificationDevices.values()
+        ).map(
+          (device) => ({
+            deviceName:
+              device.deviceName,
 
-    return res.json({
-      success: true,
-      deviceCount: devices.length,
-      devices,
-    });
-  } catch (error) {
-    console.error("FCM device listing error:", error);
+            registeredAt:
+              device.registeredAt,
 
-    return res.status(500).json({
-      success: false,
-      error: "Unable to load notification devices.",
-    });
+            lastSeenAt:
+              device.lastSeenAt,
+          })
+        );
+
+      return res.json({
+        success: true,
+        deviceCount:
+          devices.length,
+        devices,
+      });
+    } catch (error) {
+      console.error(
+        "FCM device listing error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          "Unable to load notification devices.",
+      });
+    }
   }
-});
+);
 
-/*
- * D8.2 — Send a test push to every registered prototype device
- */
 /*
  * D8.3 — Send an automatic risk alert to all registered devices
  *
  * The frontend calls this endpoint only when the alert engine detects
  * a newly triggered High/Critical risk condition.
  */
-app.post("/api/notifications/alert", async (req, res) => {
-  try {
-    const {
-      region,
-      riskScore,
-      riskLevel,
-      severity,
-      reason,
-      action,
-    } = req.body || {};
+app.post(
+  "/api/notifications/alert",
+  async (req, res) => {
+    try {
+      const {
+        region,
+        riskScore,
+        riskLevel,
+        severity,
+        reason,
+        action,
+      } = req.body || {};
 
-    const fids = Array.from(notificationDevices.keys());
+      const fids =
+        Array.from(
+          notificationDevices.keys()
+        );
 
-    if (fids.length === 0) {
-      return res.status(400).json({
+      if (fids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "No notification devices are registered yet.",
+        });
+      }
+
+      const cleanRegion =
+        typeof region === "string" &&
+        region.trim().length > 0
+          ? region.trim()
+          : "NER Region";
+
+      const cleanRiskLevel =
+        typeof riskLevel === "string" &&
+        riskLevel.trim().length > 0
+          ? riskLevel.trim()
+          : "High";
+
+      const cleanSeverity =
+        typeof severity === "string" &&
+        severity.trim().length > 0
+          ? severity.trim()
+          : cleanRiskLevel.toUpperCase();
+
+      const numericRiskScore =
+        Number(riskScore || 0);
+
+      const notificationTitle =
+        cleanSeverity === "CRITICAL"
+          ? "🚨 SIH 26001 Critical Landslide Alert"
+          : "⚠️ SIH 26001 High Landslide Alert";
+
+      const notificationBody =
+        `${cleanRegion} — Risk ${numericRiskScore}/100 (${cleanRiskLevel}). ` +
+        `${
+          typeof reason === "string" &&
+          reason.trim().length > 0
+            ? reason.trim()
+            : "Elevated landslide risk conditions detected."
+        }`;
+
+      console.log(
+        `Sending automatic FCM risk alert for ${cleanRegion} to ${fids.length} device(s)...`
+      );
+
+      const response =
+        await sendPushToFids({
+          fids,
+          title:
+            notificationTitle,
+          body:
+            notificationBody,
+          data: {
+            type:
+              "SIH26001_RISK_ALERT",
+
+            region:
+              cleanRegion,
+
+            riskScore:
+              numericRiskScore,
+
+            riskLevel:
+              cleanRiskLevel,
+
+            severity:
+              cleanSeverity,
+
+            reason:
+              typeof reason === "string"
+                ? reason.trim()
+                : "",
+
+            action:
+              typeof action === "string"
+                ? action.trim()
+                : "",
+
+            timestamp:
+              new Date().toISOString(),
+          },
+        });
+
+      console.log(
+        "FCM automatic risk alert result:",
+        response
+      );
+
+      return res.json({
+        success: true,
+
+        message:
+          "Automatic FCM risk alert sent.",
+
+        region:
+          cleanRegion,
+
+        riskLevel:
+          cleanRiskLevel,
+
+        severity:
+          cleanSeverity,
+
+        deviceCount:
+          fids.length,
+
+        successCount:
+          response.successCount,
+
+        failureCount:
+          response.failureCount,
+      });
+    } catch (error) {
+      console.error(
+        "FCM automatic risk alert error:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
-        error: "No notification devices are registered yet.",
+        error:
+          error.message ||
+          "Unable to send automatic FCM risk alert.",
       });
     }
-
-    const cleanRegion =
-      typeof region === "string" && region.trim().length > 0
-        ? region.trim()
-        : "NER Region";
-
-    const cleanRiskLevel =
-      typeof riskLevel === "string" && riskLevel.trim().length > 0
-        ? riskLevel.trim()
-        : "High";
-
-    const cleanSeverity =
-      typeof severity === "string" && severity.trim().length > 0
-        ? severity.trim()
-        : cleanRiskLevel.toUpperCase();
-
-    const numericRiskScore = Number(riskScore || 0);
-
-    const notificationTitle =
-      cleanSeverity === "CRITICAL"
-        ? "🚨 SIH 26001 Critical Landslide Alert"
-        : "⚠️ SIH 26001 High Landslide Alert";
-
-    const notificationBody =
-      `${cleanRegion} — Risk ${numericRiskScore}/100 (${cleanRiskLevel}). ` +
-      `${typeof reason === "string" && reason.trim().length > 0
-        ? reason.trim()
-        : "Elevated landslide risk conditions detected."}`;
-
-    console.log(
-      `Sending automatic FCM risk alert for ${cleanRegion} to ${fids.length} device(s)...`
-    );
-
-    const response = await sendPushToFids({
-      fids,
-      title: notificationTitle,
-      body: notificationBody,
-      data: {
-        type: "SIH26001_RISK_ALERT",
-        region: cleanRegion,
-        riskScore: numericRiskScore,
-        riskLevel: cleanRiskLevel,
-        severity: cleanSeverity,
-        reason:
-          typeof reason === "string" ? reason.trim() : "",
-        action:
-          typeof action === "string" ? action.trim() : "",
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-    console.log("FCM automatic risk alert result:", response);
-
-    return res.json({
-      success: true,
-      message: "Automatic FCM risk alert sent.",
-      region: cleanRegion,
-      riskLevel: cleanRiskLevel,
-      severity: cleanSeverity,
-      deviceCount: fids.length,
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-    });
-  } catch (error) {
-    console.error("FCM automatic risk alert error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Unable to send automatic FCM risk alert.",
-    });
   }
-});
-
-app.post("/api/notifications/test", async (req, res) => {
-  try {
-    const { title, body } = req.body || {};
-    const fids = Array.from(notificationDevices.keys());
-
-    if (fids.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "No notification devices are registered yet.",
-      });
-    }
-
-    const notificationTitle =
-      typeof title === "string" && title.trim().length > 0
-        ? title.trim()
-        : "SIH 26001 Test Alert";
-
-    const notificationBody =
-      typeof body === "string" && body.trim().length > 0
-        ? body.trim()
-        : "Firebase push notifications are working.";
-
-    console.log(
-      `Sending FCM test notification to ${fids.length} device(s)...`
-    );
-
-    const response = await sendPushToFids({
-      fids,
-      title: notificationTitle,
-      body: notificationBody,
-      data: {
-        type: "SIH26001_TEST_ALERT",
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-    console.log("FCM test notification result:", response);
-
-    return res.json({
-      success: true,
-      message: "FCM test notification sent.",
-      deviceCount: fids.length,
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-    });
-  } catch (error) {
-    console.error("FCM test notification error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Unable to send FCM test notification.",
-    });
-  }
-});
+);
 
 /*
- * Render deployment:
- *
- * Render provides the PORT environment variable.
- * The service must listen on 0.0.0.0 instead of 127.0.0.1
- * so that the public Render service can receive traffic.
+ * D8.2 — Send a test push to every registered prototype device
  */
-const HOST = process.env.HOST || "0.0.0.0";
+app.post(
+  "/api/notifications/test",
+  async (req, res) => {
+    try {
+      const {
+        title,
+        body,
+      } = req.body || {};
+
+      const fids =
+        Array.from(
+          notificationDevices.keys()
+        );
+
+      if (fids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "No notification devices are registered yet.",
+        });
+      }
+
+      const notificationTitle =
+        typeof title === "string" &&
+        title.trim().length > 0
+          ? title.trim()
+          : "SIH 26001 Test Alert";
+
+      const notificationBody =
+        typeof body === "string" &&
+        body.trim().length > 0
+          ? body.trim()
+          : "Firebase push notifications are working.";
+
+      console.log(
+        `Sending FCM test notification to ${fids.length} device(s)...`
+      );
+
+      const response =
+        await sendPushToFids({
+          fids,
+          title:
+            notificationTitle,
+          body:
+            notificationBody,
+          data: {
+            type:
+              "SIH26001_TEST_ALERT",
+
+            timestamp:
+              new Date().toISOString(),
+          },
+        });
+
+      console.log(
+        "FCM test notification result:",
+        response
+      );
+
+      return res.json({
+        success: true,
+
+        message:
+          "FCM test notification sent.",
+
+        deviceCount:
+          fids.length,
+
+        successCount:
+          response.successCount,
+
+        failureCount:
+          response.failureCount,
+      });
+    } catch (error) {
+      console.error(
+        "FCM test notification error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Unable to send FCM test notification.",
+      });
+    }
+  }
+);
 
 const server = app.listen(
   PORT,
-  HOST,
+  "0.0.0.0",
   () => {
     console.log(
-      `SIH 26001 backend running on http://${HOST}:${PORT}`
+      `SIH 26001 backend running on http://0.0.0.0:${PORT}`
     );
   }
 );

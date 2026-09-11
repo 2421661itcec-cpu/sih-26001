@@ -10,12 +10,7 @@ const {
   getMessaging,
 } = require("firebase-admin/messaging");
 
-const serviceAccountPath = path.join(
-  __dirname,
-  "..",
-  "secrets",
-  "firebase-service-account.json"
-);
+const serviceAccountPath = "/etc/secrets/firebase-service-account.json";
 
 const serviceAccount = require(
   serviceAccountPath

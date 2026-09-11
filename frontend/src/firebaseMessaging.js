@@ -9,7 +9,7 @@ const VAPID_KEY =
   "BDi9NvPqLAbpEgqoEMUiltL3Xu6km_YnvwqaCMol9IM52il7pz35IdA90s-BZE7JPp2aBgqZEUgajx1sgo7g-lc";
 
 const BACKEND_URL =
-  "http://127.0.0.1:5000";
+  "https://sih-26001-1.onrender.com";
 
 /**
  * Register this browser/device with Firebase Cloud Messaging

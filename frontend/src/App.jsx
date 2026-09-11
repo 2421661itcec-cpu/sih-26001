@@ -9,6 +9,12 @@ import {
 } from "./utils/riskData";
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
   const [backendStatus, setBackendStatus] = useState("Checking...");
   const [parameters, setParameters] = useState(DEFAULT_RISK_INPUTS);
 
@@ -31,8 +37,29 @@ function App() {
   const [notificationStatus, setNotificationStatus] = useState("default");
   const previousRegionalLevels = useRef({});
 
+  const handleLogin = (event) => {
+    event.preventDefault();
+    setLoginError("");
+
+    if (loginUsername.trim() === "admin" && loginPassword === "geopulse2026") {
+      setIsAuthenticated(true);
+      setLoginUsername("");
+      setLoginPassword("");
+      return;
+    }
+
+    setLoginError("Invalid username or password. Please use the demo credentials.");
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setLoginUsername("");
+    setLoginPassword("");
+    setLoginError("");
+  };
+
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/api/health")
+    fetch("https://sih-26001-1.onrender.com/api/health")
       .then((response) => {
         if (!response.ok) {
           throw new Error("Backend request failed");
@@ -153,7 +180,7 @@ function App() {
   const sendFcmRiskAlert = async (alert) => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:5000/api/notifications/alert",
+        "https://sih-26001-1.onrender.com/api/notifications/alert",
         {
           method: "POST",
           headers: {
@@ -269,7 +296,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:5000/api/regional-monitoring"
+        "https://sih-26001-1.onrender.com/api/regional-monitoring"
       );
 
       const data = await response.json();
@@ -423,7 +450,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:5000/api/risk/predict",
+        "https://sih-26001-1.onrender.com/api/risk/predict",
         {
           method: "POST",
           headers: {
@@ -731,6 +758,33 @@ function App() {
     return `${change > 0 ? "+" : ""}${change}%`;
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", background: "linear-gradient(135deg, #07111f 0%, #0d1b2a 55%, #102a43 100%)", color: "#fff" }}>
+        <div style={{ width: "100%", maxWidth: "430px", padding: "36px", borderRadius: "24px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 80px rgba(0,0,0,0.35)", backdropFilter: "blur(18px)" }}>
+          <div style={{ textAlign: "center", marginBottom: "30px" }}>
+            <div style={{ width: "64px", height: "64px", margin: "0 auto 18px", borderRadius: "18px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.12)", fontSize: "30px" }}>◈</div>
+            <h1 style={{ margin: 0, fontSize: "32px" }}>GeoPulse</h1>
+            <p style={{ margin: "10px 0 0", color: "rgba(255,255,255,0.72)", lineHeight: 1.5 }}>AI-Based Early Warning & Landslide Risk Monitoring System</p>
+            <span style={{ display: "inline-block", marginTop: "14px", padding: "6px 10px", borderRadius: "999px", background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.78)", fontSize: "12px", fontWeight: 700 }}>SIH 26001 • NER DISASTER MONITORING</span>
+          </div>
+          <form onSubmit={handleLogin}>
+            <label style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>Username</label>
+            <input type="text" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} placeholder="Enter username" autoComplete="username" style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", marginBottom: "18px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "#fff", outline: "none", fontSize: "15px" }} />
+            <label style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>Password</label>
+            <div style={{ position: "relative", marginBottom: "18px" }}>
+              <input type={showLoginPassword ? "text" : "password"} value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" style={{ width: "100%", boxSizing: "border-box", padding: "13px 72px 13px 14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "#fff", outline: "none", fontSize: "15px" }} />
+              <button type="button" onClick={() => setShowLoginPassword((value) => !value)} style={{ position: "absolute", right: "8px", top: "7px", padding: "7px 9px", border: "none", borderRadius: "8px", background: "transparent", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}>{showLoginPassword ? "HIDE" : "SHOW"}</button>
+            </div>
+            {loginError && <div style={{ marginBottom: "16px", padding: "11px 12px", borderRadius: "10px", background: "rgba(220,38,38,0.16)", border: "1px solid rgba(248,113,113,0.28)", color: "#fecaca", fontSize: "13px" }}>{loginError}</div>}
+            <button type="submit" style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "#fff", color: "#07111f", cursor: "pointer", fontSize: "15px", fontWeight: 800 }}>LOGIN TO GEOPULSE</button>
+          </form>
+          <div style={{ marginTop: "22px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.10)", textAlign: "center", color: "rgba(255,255,255,0.48)", fontSize: "11px" }}>Prototype screening access • Authorized monitoring personnel</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -762,7 +816,25 @@ function App() {
             <strong>{backendStatus}</strong>
           </div>
         </div>
-      </header>
+      
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              marginLeft: "14px",
+              padding: "8px 12px",
+              borderRadius: "9px",
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.06)",
+              color: "inherit",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: "12px",
+            }}
+          >
+            Logout
+          </button>
+</header>
 
       <main className="dashboard">
         <section className="hero-section">

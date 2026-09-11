@@ -1,7 +1,6 @@
 import {
   getMessaging,
-  onRegistered,
-  register,
+  getToken,
 } from "firebase/messaging";
 
 import { app } from "./firebase";
@@ -49,36 +48,24 @@ export async function registerForPushNotifications(
       serviceWorkerRegistration
     );
 
-    const installationIdPromise =
-      new Promise((resolve) => {
-        onRegistered(
-          messaging,
-          (installationId) => {
-            console.log(
-              "Firebase Installation ID:",
-              installationId
-            );
-
-            resolve(installationId);
-          }
-        );
-      });
-
-    await register(messaging, {
+    const fcmToken = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration,
     });
 
+    if (!fcmToken) {
+      throw new Error(
+        "Firebase did not return an FCM registration token."
+      );
+    }
+
     console.log(
-      "SIH 26001 device registered with Firebase Cloud Messaging."
+      "SIH 26001 FCM registration token obtained."
     );
 
-    const installationId =
-      await installationIdPromise;
-
     window.localStorage.setItem(
-      "sih26001_firebase_installation_id",
-      installationId
+      "sih26001_fcm_token",
+      fcmToken
     );
 
     console.log(
@@ -93,7 +80,7 @@ export async function registerForPushNotifications(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fid: installationId,
+          fid: fcmToken,
           deviceName,
         }),
       }
@@ -118,7 +105,7 @@ export async function registerForPushNotifications(
         "sih26001-fcm-registered",
         {
           detail: {
-            installationId,
+            tokenRegistered: true,
             deviceName,
             deviceCount:
               result.deviceCount,
@@ -130,7 +117,7 @@ export async function registerForPushNotifications(
     return {
       success: true,
       permission,
-      installationId,
+      tokenRegistered: true,
       deviceName,
       deviceCount:
         result.deviceCount,

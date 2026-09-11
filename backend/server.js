@@ -26,6 +26,17 @@ app.use(express.json());
  */
 const notificationDevices = new Map();
 
+/*
+ * D8.3 — Centralized risk-transition notification state.
+ *
+ * Stores the last risk level that generated a push for each region.
+ * This prevents duplicate notifications when multiple dashboards
+ * are monitoring the same region.
+ *
+ * Prototype-only in-memory state.
+ */
+const lastNotifiedRiskLevels = new Map();
+
 const REGIONAL_PROFILES = {
   Sikkim: {
     susceptibility: 1.10,
@@ -1083,10 +1094,12 @@ app.get(
 );
 
 /*
- * D8.3 — Send an automatic risk alert to all registered devices
+ * D8.3 — Send an automatic risk-transition alert
  *
- * The frontend calls this endpoint only when the alert engine detects
- * a newly triggered High/Critical risk condition.
+ * The frontend reports every actual regional risk-level transition.
+ * The backend centrally deduplicates the transition so multiple
+ * dashboard clients cannot send duplicate pushes for the same
+ * region + risk level.
  */
 app.post(
   "/api/notifications/alert",
@@ -1096,10 +1109,71 @@ app.post(
         region,
         riskScore,
         riskLevel,
+        previousRiskLevel,
         severity,
+        rainfall,
+        soilStability,
+        soilMoisture,
+        slopeSusceptibility,
         reason,
         action,
       } = req.body || {};
+
+      const cleanRegion =
+        typeof region === "string" &&
+        region.trim().length > 0
+          ? region.trim()
+          : "NER Region";
+
+      const cleanRiskLevel =
+        typeof riskLevel === "string" &&
+        riskLevel.trim().length > 0
+          ? riskLevel.trim()
+          : "High";
+
+      const cleanPreviousRiskLevel =
+        typeof previousRiskLevel === "string" &&
+        previousRiskLevel.trim().length > 0
+          ? previousRiskLevel.trim()
+          : null;
+
+      /*
+       * Never create a notification from the first baseline reading.
+       * A push requires an actual previous -> current transition.
+       */
+      if (
+        !cleanPreviousRiskLevel ||
+        cleanPreviousRiskLevel === cleanRiskLevel
+      ) {
+        return res.json({
+          success: true,
+          notificationSent: false,
+          reason: "No risk-level transition detected.",
+          region: cleanRegion,
+          previousRiskLevel: cleanPreviousRiskLevel,
+          riskLevel: cleanRiskLevel,
+        });
+      }
+
+      /*
+       * Central duplicate protection.
+       * If another dashboard already notified this exact region
+       * at this exact risk level, do not send it again.
+       */
+      const lastNotifiedLevel =
+        lastNotifiedRiskLevels.get(cleanRegion);
+
+      if (lastNotifiedLevel === cleanRiskLevel) {
+        return res.json({
+          success: true,
+          notificationSent: false,
+          reason:
+            "Duplicate risk level already notified for this region.",
+          region: cleanRegion,
+          previousRiskLevel: cleanPreviousRiskLevel,
+          riskLevel: cleanRiskLevel,
+        });
+      }
 
       const fids =
         Array.from(
@@ -1114,115 +1188,172 @@ app.post(
         });
       }
 
-      const cleanRegion =
-        typeof region === "string" &&
-        region.trim().length > 0
-          ? region.trim()
-          : "NER Region";
-
-      const cleanRiskLevel =
-        typeof riskLevel === "string" &&
-        riskLevel.trim().length > 0
-          ? riskLevel.trim()
-          : "High";
-
-      const cleanSeverity =
-        typeof severity === "string" &&
-        severity.trim().length > 0
-          ? severity.trim()
-          : cleanRiskLevel.toUpperCase();
-
       const numericRiskScore =
         Number(riskScore || 0);
 
-      const notificationTitle =
-        cleanSeverity === "CRITICAL"
-          ? "🚨 SIH 26001 Critical Landslide Alert"
-          : "⚠️ SIH 26001 High Landslide Alert";
+      const cleanRainfall =
+        Number.isFinite(Number(rainfall))
+          ? Number(rainfall)
+          : 0;
+
+      const cleanSoilStability =
+        Number.isFinite(Number(soilStability))
+          ? Number(soilStability)
+          : 0;
+
+      const cleanSoilMoisture =
+        Number.isFinite(Number(soilMoisture))
+          ? Number(soilMoisture)
+          : 0;
+
+      let notificationTitle;
+
+      if (cleanRiskLevel === "Critical") {
+        notificationTitle =
+          "🚨 CRITICAL LANDSLIDE ALERT";
+      } else if (cleanRiskLevel === "High") {
+        notificationTitle =
+          "⚠️ HIGH LANDSLIDE ALERT";
+      } else {
+        notificationTitle =
+          "ℹ️ LANDSLIDE RISK UPDATE";
+      }
+
+      const cleanReason =
+        typeof reason === "string" &&
+        reason.trim().length > 0
+          ? reason.trim()
+          : "Landslide risk conditions have changed.";
+
+      const cleanAction =
+        typeof action === "string" &&
+        action.trim().length > 0
+          ? action.trim()
+          : "Continue monitoring environmental and terrain conditions.";
 
       const notificationBody =
-        `${cleanRegion} — Risk ${numericRiskScore}/100 (${cleanRiskLevel}). ` +
-        `${
-          typeof reason === "string" &&
-          reason.trim().length > 0
-            ? reason.trim()
-            : "Elevated landslide risk conditions detected."
-        }`;
+        `${cleanRegion} — Risk ${numericRiskScore}/100
+
+` +
+        `Rainfall: ${cleanRainfall} mm/24h
+` +
+        `Soil Stability: ${cleanSoilStability}/100
+` +
+        `Soil Moisture: ${cleanSoilMoisture}%
+
+` +
+        `${cleanReason}
+
+` +
+        `${cleanAction}`;
 
       console.log(
-        `Sending automatic FCM risk alert for ${cleanRegion} to ${fids.length} device(s)...`
+        `Risk transition detected: ${cleanRegion} ` +
+        `${cleanPreviousRiskLevel} → ${cleanRiskLevel}`
+      );
+
+      console.log(
+        `Sending automatic FCM risk-transition alert to ` +
+        `${fids.length} device(s)...`
       );
 
       const response =
         await sendPushToFids({
           fids,
-          title:
-            notificationTitle,
-          body:
-            notificationBody,
+          title: notificationTitle,
+          body: notificationBody,
           data: {
             type:
-              "SIH26001_RISK_ALERT",
+              "SIH26001_RISK_LEVEL_CHANGE",
 
             region:
               cleanRegion,
 
-            riskScore:
-              numericRiskScore,
+            previousRiskLevel:
+              cleanPreviousRiskLevel,
 
             riskLevel:
               cleanRiskLevel,
 
+            riskScore:
+              numericRiskScore,
+
+            rainfall:
+              cleanRainfall,
+
+            soilStability:
+              cleanSoilStability,
+
+            soilMoisture:
+              cleanSoilMoisture,
+
+            slopeSusceptibility:
+              Number(
+                slopeSusceptibility || 0
+              ),
+
             severity:
-              cleanSeverity,
+              typeof severity === "string"
+                ? severity
+                : cleanRiskLevel.toUpperCase(),
 
             reason:
-              typeof reason === "string"
-                ? reason.trim()
-                : "",
+              cleanReason,
 
             action:
-              typeof action === "string"
-                ? action.trim()
-                : "",
+              cleanAction,
 
             timestamp:
               new Date().toISOString(),
           },
         });
 
+      /*
+       * Only mark the transition as notified after FCM has
+       * successfully processed the multicast request.
+       */
+      if (response.successCount > 0) {
+        lastNotifiedRiskLevels.set(
+          cleanRegion,
+          cleanRiskLevel
+        );
+      }
+
       console.log(
-        "FCM automatic risk alert result:",
-        response
+        "FCM automatic risk-transition result:",
+        {
+          region: cleanRegion,
+          previousRiskLevel:
+            cleanPreviousRiskLevel,
+          riskLevel:
+            cleanRiskLevel,
+          successCount:
+            response.successCount,
+          failureCount:
+            response.failureCount,
+        }
       );
 
       return res.json({
         success: true,
-
-        message:
-          "Automatic FCM risk alert sent.",
-
+        notificationSent:
+          response.successCount > 0,
         region:
           cleanRegion,
-
+        previousRiskLevel:
+          cleanPreviousRiskLevel,
         riskLevel:
           cleanRiskLevel,
-
-        severity:
-          cleanSeverity,
-
         deviceCount:
           fids.length,
-
         successCount:
           response.successCount,
-
         failureCount:
           response.failureCount,
       });
     } catch (error) {
       console.error(
-        "FCM automatic risk alert error:",
+        "FCM automatic risk-transition error:",
         error
       );
 
@@ -1230,7 +1361,7 @@ app.post(
         success: false,
         error:
           error.message ||
-          "Unable to send automatic FCM risk alert.",
+          "Unable to send automatic FCM risk-transition alert.",
       });
     }
   }

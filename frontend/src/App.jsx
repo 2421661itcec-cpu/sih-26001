@@ -190,7 +190,16 @@ function App() {
             region: alert.region,
             riskScore: alert.riskScore,
             riskLevel: alert.riskLevel,
+            previousRiskLevel:
+              alert.previousRiskLevel,
             severity: alert.severity,
+            rainfall: alert.rainfall,
+            soilStability:
+              alert.soilStability,
+            soilMoisture:
+              alert.soilMoisture,
+            slopeSusceptibility:
+              alert.slopeSusceptibility,
             reason: alert.reason,
             action: alert.action,
           }),
@@ -207,7 +216,7 @@ function App() {
       }
 
       console.log(
-        "SIH 26001 automatic FCM risk alert sent:",
+        "SIH 26001 automatic FCM risk-transition result:",
         result
       );
 
@@ -230,36 +239,119 @@ function App() {
     const newlyTriggeredAlerts = [];
 
     regions.forEach((region) => {
-      const severity = getAlertSeverity(region);
-      const previousLevel = previousRegionalLevels.current[region.location];
+      const currentLevel =
+        region.riskLevel || "Unknown";
 
-      if (severity) {
-        const isNewAlert =
-          previousLevel === undefined ||
-          previousLevel === "Low" ||
-          previousLevel === "Moderate";
+      const previousLevel =
+        previousRegionalLevels.current[
+          region.location
+        ];
 
-        if (isNewAlert) {
-          const alert = {
-            id: `${region.location}-${Date.now()}`,
-            region: region.location,
-            riskScore: Number(region.riskScore || 0),
-            riskLevel: region.riskLevel,
-            severity,
-            reason:
-              region.warning ||
-              region.trend?.reason ||
-              "Elevated landslide risk conditions detected.",
-            action: getAlertAction(region),
-            timestamp: new Date().toISOString(),
-          };
+      /*
+       * First regional reading establishes the baseline.
+       * It must never generate a notification.
+       */
+      const hasPreviousLevel =
+        previousLevel !== undefined;
 
+      /*
+       * A notification is generated for EVERY actual
+       * risk-level transition:
+       *
+       * Low → Moderate
+       * Moderate → High
+       * High → Critical
+       * Critical → High
+       * High → Moderate
+       * Moderate → Low
+       *
+       * Same level → no notification.
+       */
+      const hasRiskTransition =
+        hasPreviousLevel &&
+        previousLevel !== currentLevel;
+
+      const severity =
+        getAlertSeverity(region);
+
+      if (hasRiskTransition) {
+        const alert = {
+          id: `${region.location}-${Date.now()}`,
+
+          region:
+            region.location,
+
+          riskScore:
+            Number(region.riskScore || 0),
+
+          riskLevel:
+            currentLevel,
+
+          previousRiskLevel:
+            previousLevel,
+
+          severity:
+            severity || "UPDATE",
+
+          rainfall:
+            Number(
+              region.inputSummary?.rainfall || 0
+            ),
+
+          soilStability:
+            Number(
+              region.inputSummary?.soilStability || 0
+            ),
+
+          soilMoisture:
+            Number(
+              region.inputSummary?.soilMoisture || 0
+            ),
+
+          slopeSusceptibility:
+            Number(
+              region.regionalProfile?.susceptibility ||
+                0
+            ),
+
+          reason:
+            region.warning ||
+            region.trend?.reason ||
+            "Landslide risk conditions have changed.",
+
+          action:
+            getAlertAction(region),
+
+          timestamp:
+            new Date().toISOString(),
+        };
+
+        /*
+         * Only High/Critical transitions become
+         * visible active alerts in the dashboard.
+         *
+         * FCM is still sent for EVERY risk-level
+         * transition.
+         */
+        if (severity) {
           newlyTriggeredAlerts.push(alert);
         }
+
+        /*
+         * Central backend performs the final duplicate
+         * protection and sends the push to every
+         * subscribed device.
+         */
+        sendFcmRiskAlert(alert);
       }
 
-      previousRegionalLevels.current[region.location] =
-        region.riskLevel || "Unknown";
+      /*
+       * Always update the baseline after processing
+       * the current observation.
+       */
+      previousRegionalLevels.current[
+        region.location
+      ] = currentLevel;
     });
 
     if (newlyTriggeredAlerts.length === 0) {
@@ -277,10 +369,11 @@ function App() {
 
     newlyTriggeredAlerts.forEach((alert) => {
       sendBrowserAlert(alert).catch((error) => {
-        console.error("Browser alert error:", error);
+        console.error(
+          "Browser alert error:",
+          error
+        );
       });
-
-      sendFcmRiskAlert(alert);
     });
   };
 

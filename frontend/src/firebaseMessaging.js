@@ -1,9 +1,10 @@
 import {
+  getMessaging,
   onRegistered,
   register,
 } from "firebase/messaging";
 
-import { messaging } from "./firebase";
+import { app } from "./firebase";
 
 const VAPID_KEY =
   "BDi9NvPqLAbpEgqoEMUiltL3Xu6km_YnvwqaCMol9IM52il7pz35IdA90s-BZE7JPp2aBgqZEUgajx1sgo7g-lc";
@@ -11,44 +12,21 @@ const VAPID_KEY =
 const BACKEND_URL =
   "https://sih-26001-1.onrender.com";
 
-/**
- * Register this browser/device with Firebase Cloud Messaging
- * and register its Firebase Installation ID (FID) with the
- * SIH 26001 backend.
- */
 export async function registerForPushNotifications(
   deviceName = "SIH Prototype Device"
 ) {
   try {
-    /*
-     * --------------------------------------------------------
-     * 1. Check browser notification support
-     * --------------------------------------------------------
-     */
-
     if (!("Notification" in window)) {
       throw new Error(
         "This browser does not support notifications."
       );
     }
 
-    /*
-     * --------------------------------------------------------
-     * 2. Check service-worker support
-     * --------------------------------------------------------
-     */
-
     if (!("serviceWorker" in navigator)) {
       throw new Error(
         "This browser does not support service workers."
       );
     }
-
-    /*
-     * --------------------------------------------------------
-     * 3. Request notification permission
-     * --------------------------------------------------------
-     */
 
     const permission =
       await Notification.requestPermission();
@@ -59,11 +37,7 @@ export async function registerForPushNotifications(
       );
     }
 
-    /*
-     * --------------------------------------------------------
-     * 4. Register Firebase messaging service worker
-     * --------------------------------------------------------
-     */
+    const messaging = getMessaging(app);
 
     const serviceWorkerRegistration =
       await navigator.serviceWorker.register(
@@ -74,12 +48,6 @@ export async function registerForPushNotifications(
       "Firebase messaging service worker registered:",
       serviceWorkerRegistration
     );
-
-    /*
-     * --------------------------------------------------------
-     * 5. Wait for Firebase Installation ID (FID)
-     * --------------------------------------------------------
-     */
 
     const installationIdPromise =
       new Promise((resolve) => {
@@ -96,12 +64,6 @@ export async function registerForPushNotifications(
         );
       });
 
-    /*
-     * --------------------------------------------------------
-     * 6. Register app instance with FCM
-     * --------------------------------------------------------
-     */
-
     await register(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration,
@@ -111,31 +73,13 @@ export async function registerForPushNotifications(
       "SIH 26001 device registered with Firebase Cloud Messaging."
     );
 
-    /*
-     * --------------------------------------------------------
-     * 7. Get the Firebase Installation ID
-     * --------------------------------------------------------
-     */
-
     const installationId =
       await installationIdPromise;
-
-    /*
-     * --------------------------------------------------------
-     * 8. Store FID locally
-     * --------------------------------------------------------
-     */
 
     window.localStorage.setItem(
       "sih26001_firebase_installation_id",
       installationId
     );
-
-    /*
-     * --------------------------------------------------------
-     * 9. Send FID to SIH backend
-     * --------------------------------------------------------
-     */
 
     console.log(
       "Registering device with SIH 26001 backend..."
@@ -145,11 +89,9 @@ export async function registerForPushNotifications(
       `${BACKEND_URL}/api/notifications/register`,
       {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           fid: installationId,
           deviceName,
@@ -157,8 +99,7 @@ export async function registerForPushNotifications(
       }
     );
 
-    const result =
-      await response.json();
+    const result = await response.json();
 
     if (!response.ok || !result.success) {
       throw new Error(
@@ -171,12 +112,6 @@ export async function registerForPushNotifications(
       "SIH 26001 notification device registered:",
       result
     );
-
-    /*
-     * --------------------------------------------------------
-     * 10. Notify the existing SIH frontend alert system
-     * --------------------------------------------------------
-     */
 
     window.dispatchEvent(
       new CustomEvent(
@@ -192,21 +127,11 @@ export async function registerForPushNotifications(
       )
     );
 
-    /*
-     * --------------------------------------------------------
-     * 11. Return successful registration
-     * --------------------------------------------------------
-     */
-
     return {
       success: true,
-
       permission,
-
       installationId,
-
       deviceName,
-
       deviceCount:
         result.deviceCount,
     };
@@ -218,14 +143,4 @@ export async function registerForPushNotifications(
 
     throw error;
   }
-}
-
-/**
- * Retrieve the Firebase Installation ID that was
- * previously stored on this device.
- */
-export function getStoredInstallationId() {
-  return window.localStorage.getItem(
-    "sih26001_firebase_installation_id"
-  );
 }

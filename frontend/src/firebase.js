@@ -1,8 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDPHYgREqFPPPDT5axKiOjbVR6E8c3oFJM",
+  apiKey: "AIzaSyDPHYgREqFPPPDT5axKiOjbVR1Y6E8c3oFJM",
   authDomain: "sih-26001-landslide-alert.firebaseapp.com",
   projectId: "sih-26001-landslide-alert",
   storageBucket: "sih-26001-landslide-alert.firebasestorage.app",
@@ -13,6 +12,4 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const messaging = getMessaging(app);
-
-export { app, messaging };
+export { app };
